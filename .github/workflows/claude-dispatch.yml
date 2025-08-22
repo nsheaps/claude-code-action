@@ -25,6 +25,32 @@ jobs:
           # echo "Setting up environment..."
           # Add any preliminary setup commands here to setup Claude's dev environment
           # e.g., npm install, etc.
+      - name: Generate GitHub App auth token (valid for 1hr)
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.CLAUDE_GH_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CLAUDE_GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Configure Git Client
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          BOT_USER_ID="$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)"
+          BOT_USER_NAME='${{ steps.app-token.outputs.app-slug }}[bot]'
+
+          # todo probably unnecessary to configure the username and email but the token is necessary for it to be able to pull and push
+          # to other repos without manual setup for the auth
+          git config --global user.name "$BOT_USER_NAME"
+          git config --global user.email "$BOT_USER_ID+$BOT_USER_NAME@users.noreply.github.com"
+
+          # uses GH_TOKEN from env to auth pushes/pulls to github
+          gh auth setup-git
+
+          echo "::group::gh auth status"
+          gh auth status
+          echo "::endgroup::"
 
       - name: Run Claude Code
         id: claude
@@ -37,6 +63,9 @@ jobs:
 
           # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4)
           # model: "claude-opus-4-20250514"
+          
+          additional_permissions: |
+            actions: read
 
           # Optional: Allow Claude to run specific commands
           allowed_tools: |
@@ -63,5 +92,6 @@ jobs:
             mcp__github_ci__download_job_log
 
           # Optional: Custom environment variables for Claude
-          # claude_env: |
-          #   NODE_ENV: test
+          claude_env: |
+            GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+            
