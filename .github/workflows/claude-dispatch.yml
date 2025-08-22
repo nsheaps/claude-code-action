@@ -39,10 +39,28 @@ jobs:
           # model: "claude-opus-4-20250514"
 
           # Optional: Allow Claude to run specific commands
-          # allowed_tools: |
-            # Bash(npm run lint)
-            # Bash(npm run test)
-            # Bash(npm run build)
+          allowed_tools: |
+            Task
+            Bash
+            Glob
+            Grep
+            LS
+            exit_plan_mode
+            Read
+            Edit
+            MultiEdit
+            Write
+            NotebookRead
+            NotebookEdit
+            TodoWrite
+            WebSearch
+            WebFetch
+            ListMcpResourcesTool
+            ReadMcpResourceTool
+            mcp__github_comment__update_claude_comment
+            mcp__github_ci__get_ci_status
+            mcp__github_ci__get_workflow_run_details
+            mcp__github_ci__download_job_log
 
           # Optional: Custom environment variables for Claude
           # claude_env: |
