@@ -165,6 +165,21 @@ export async function prepareMcpConfig(
       };
     }
 
+    // Include token refresh server when daemon is active
+    const daemonActive = process.env.DAEMON_ACTIVE === "true";
+    if (daemonActive) {
+      baseMcpConfig.mcpServers.github_token_refresh = {
+        command: "bun",
+        args: [
+          "run",
+          `${process.env.GITHUB_ACTION_PATH}/src/mcp/token-refresh-server.ts`,
+        ],
+        env: {
+          RUNNER_TEMP: process.env.RUNNER_TEMP || "/tmp",
+        },
+      };
+    }
+
     if (hasGitHubMcpTools) {
       baseMcpConfig.mcpServers.github = {
         command: "docker",

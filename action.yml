@@ -89,6 +89,12 @@ inputs:
   github_token:
     description: "GitHub token with repo and pull request permissions (optional if using GitHub App)"
     required: false
+  app_id:
+    description: "GitHub App ID for direct App authentication (alternative to OIDC, requires app_private_key)"
+    required: false
+  app_private_key:
+    description: "GitHub App private key for direct App authentication (alternative to OIDC, requires app_id)"
+    required: false
   use_bedrock:
     description: "Use Amazon Bedrock with OIDC authentication instead of direct Anthropic API"
     required: false
@@ -103,7 +109,7 @@ inputs:
     required: false
     default: ""
   timeout_minutes:
-    description: "Timeout in minutes for execution"
+    description: "Timeout in minutes for execution (automatically extended to 360 minutes when using app_id/app_private_key)"
     required: false
     default: "30"
   use_sticky_comment:
@@ -160,6 +166,8 @@ runs:
         OVERRIDE_PROMPT: ${{ inputs.override_prompt }}
         MCP_CONFIG: ${{ inputs.mcp_config }}
         OVERRIDE_GITHUB_TOKEN: ${{ inputs.github_token }}
+        APP_ID: ${{ inputs.app_id }}
+        APP_PRIVATE_KEY: ${{ inputs.app_private_key }}
         ALLOWED_BOTS: ${{ inputs.allowed_bots }}
         GITHUB_RUN_ID: ${{ github.run_id }}
         USE_STICKY_COMMENT: ${{ inputs.use_sticky_comment }}
@@ -209,7 +217,7 @@ runs:
         INPUT_SETTINGS: ${{ inputs.settings }}
         INPUT_SYSTEM_PROMPT: ""
         INPUT_APPEND_SYSTEM_PROMPT: ${{ env.APPEND_SYSTEM_PROMPT }}
-        INPUT_TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
+        INPUT_TIMEOUT_MINUTES: ${{ steps.prepare.outputs.DAEMON_ACTIVE == 'true' && '360' || inputs.timeout_minutes }}
         INPUT_CLAUDE_ENV: ${{ inputs.claude_env }}
         INPUT_FALLBACK_MODEL: ${{ inputs.fallback_model }}
         INPUT_EXPERIMENTAL_SLASH_COMMANDS_DIR: ${{ github.action_path }}/slash-commands

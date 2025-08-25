@@ -2,6 +2,8 @@
 
 import * as core from "@actions/core";
 import { retryWithBackoff } from "../utils/retry";
+import { TokenManager } from "../daemon/token-manager";
+import { DaemonController } from "../daemon/daemon-controller";
 
 async function getOidcToken(): Promise<string> {
   try {
@@ -74,17 +76,95 @@ async function exchangeForAppToken(oidcToken: string): Promise<string> {
   return appToken;
 }
 
-export async function setupGitHubToken(): Promise<string> {
-  try {
-    // Check if GitHub token was provided as override
-    const providedToken = process.env.OVERRIDE_GITHUB_TOKEN;
+async function setupGitHubAppAuth(): Promise<{
+  token: string;
+  daemonController?: DaemonController;
+}> {
+  const appId = process.env.APP_ID;
+  const appPrivateKey = process.env.APP_PRIVATE_KEY;
 
+  if (!appId || !appPrivateKey) {
+    throw new Error(
+      "APP_ID and APP_PRIVATE_KEY environment variables are required for GitHub App authentication",
+    );
+  }
+
+  // Parse repository information
+  const repository = process.env.GITHUB_REPOSITORY;
+  if (!repository) {
+    throw new Error("GITHUB_REPOSITORY environment variable not found");
+  }
+
+  const [repositoryOwner, repositoryName] = repository.split("/");
+  if (!repositoryOwner || !repositoryName) {
+    throw new Error(`Invalid repository format: ${repository}`);
+  }
+
+  console.log(
+    `Setting up GitHub App authentication for ${repositoryOwner}/${repositoryName}...`,
+  );
+
+  // Create token manager and get initial token
+  const tokenManager = new TokenManager({
+    appId,
+    privateKey: appPrivateKey,
+    repositoryOwner,
+    repositoryName,
+  });
+
+  // Get installation ID first
+  await tokenManager.getInstallationId();
+
+  // Get initial token
+  const initialToken = await tokenManager.getToken();
+  console.log("Initial GitHub App token obtained successfully");
+
+  // Set up daemon controller for token refresh
+  const daemonController = new DaemonController({
+    appId,
+    privateKey: appPrivateKey,
+    repositoryOwner,
+    repositoryName,
+    refreshIntervalMinutes: 30,
+    maxRuntimeHours: 6,
+  });
+
+  // Start the daemon
+  await daemonController.startDaemon();
+  console.log("GitHub App token refresh daemon started");
+
+  return {
+    token: initialToken.token,
+    daemonController,
+  };
+}
+
+export async function setupGitHubToken(): Promise<{
+  token: string;
+  daemonController?: DaemonController;
+}> {
+  try {
+    // Priority 1: Check if GitHub token was provided as override
+    const providedToken = process.env.OVERRIDE_GITHUB_TOKEN;
     if (providedToken) {
       console.log("Using provided GITHUB_TOKEN for authentication");
       core.setOutput("GITHUB_TOKEN", providedToken);
-      return providedToken;
+      return { token: providedToken };
     }
 
+    // Priority 2: Check if GitHub App credentials are provided
+    const appId = process.env.APP_ID;
+    const appPrivateKey = process.env.APP_PRIVATE_KEY;
+
+    if (appId && appPrivateKey) {
+      console.log("Using GitHub App authentication with token refresh daemon");
+      const result = await setupGitHubAppAuth();
+      core.setOutput("GITHUB_TOKEN", result.token);
+      core.setOutput("DAEMON_ACTIVE", "true");
+      return result;
+    }
+
+    // Priority 3: Fall back to OIDC token exchange (existing behavior)
     console.log("Requesting OIDC token...");
     const oidcToken = await retryWithBackoff(() => getOidcToken());
     console.log("OIDC token successfully obtained");
@@ -97,11 +177,11 @@ export async function setupGitHubToken(): Promise<string> {
 
     console.log("Using GITHUB_TOKEN from OIDC");
     core.setOutput("GITHUB_TOKEN", appToken);
-    return appToken;
+    return { token: appToken };
   } catch (error) {
     // Only set failed if we get here - workflow validation errors will exit(0) before this
     core.setFailed(
-      `Failed to setup GitHub token: ${error}\n\nIf you instead wish to use this action with a custom GitHub token or custom GitHub app, provide a \`github_token\` in the \`uses\` section of the app in your workflow yml file.`,
+      `Failed to setup GitHub token: ${error}\n\nAuthentication methods (in priority order):\n1. Provide github_token input\n2. Provide app_id and app_private_key inputs (enables 6-hour runtime)\n3. Use default OIDC authentication (requires id-token: write permission)`,
     );
     process.exit(1);
   }

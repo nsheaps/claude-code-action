@@ -30,6 +30,7 @@ async function run() {
 
     // Step 2: Setup GitHub token based on mode
     let githubToken: string;
+
     if (validatedMode === "experimental-review") {
       // For experimental-review mode, use the default GitHub Action token
       githubToken = process.env.DEFAULT_WORKFLOW_TOKEN || "";
@@ -41,8 +42,10 @@ async function run() {
       console.log("Using default GitHub Action token for review mode");
       core.setOutput("GITHUB_TOKEN", githubToken);
     } else {
-      // For other modes, use the existing token exchange
-      githubToken = await setupGitHubToken();
+      // For other modes, use the enhanced token setup
+      const tokenResult = await setupGitHubToken();
+      githubToken = tokenResult.token;
+      // daemonController is handled internally and not needed here
     }
     const octokit = createOctokit(githubToken);
 

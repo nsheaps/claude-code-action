@@ -808,6 +808,27 @@ f. If you are unable to complete certain steps, such as running a linter or test
     promptContent += `\n\nCUSTOM INSTRUCTIONS:\n${context.customInstructions}`;
   }
 
+  // Add daemon context information if daemon is active
+  const daemonActive = process.env.DAEMON_ACTIVE === "true";
+  if (daemonActive) {
+    promptContent += `
+
+AUTHENTICATION & TIMEOUT INFORMATION:
+This action is using GitHub App authentication with automatic token refresh. A background daemon has been started that will:
+- Refresh your GitHub access token every 30 minutes
+- Keep the action running for up to 6 hours (instead of the usual 30 minutes)  
+- Automatically update git and GitHub CLI credentials with each refresh
+- Log all refresh operations for debugging
+
+If you encounter authentication issues during long-running tasks, the daemon may have encountered problems. Check for:
+- Expired GitHub App installation
+- Network connectivity issues
+- Permission changes to the repository
+- Daemon process failures (rare)
+
+The extended runtime allows for complex, multi-step implementations that require more time than typical actions.`;
+  }
+
   return promptContent;
 }
 
